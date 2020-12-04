@@ -1,0 +1,572 @@
+---
+title: "**Real-Time Prediciton of Online Purchase Behavior**"
+author: "_Harini_"
+date: "03/12/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## ACKNOWLEDGEMENT
+I wish to express my sense of gratitude and sincere thanks to Dr.Rafael Irizarry, Professor of Biostatistics at Harvard Chan School of Public Health, for his kind support. I also extend my sincere thanks to the Teaching Assistants who gave great inputs and for their valuable suggestion throughout the Data Science course.
+
+## INTRODUCTION
+The Project is related to the choose your own project of the HarvardX:PH125:9x Data science Capstone. Now-a-days, due to technological advancement more customer choose Internet platform to buy their products as it is easy and convenient. It has become very essential to know the customer needs for any online merchants to sustain in such competitive market. The records of the consumer operations and consumer behavior data, make it possible to predict customers buying preferences. This empirical study investigates the contribution of different types of predictors to the purchasing behaviour at an online store. 
+
+## PROBLEM DEFINITION
+Accurate prediction of shopping channel preferences has become an important issue for retailers seeking to maximize customer loyalty. We evaluate the predictive accuracy of an unbalanced classification of consumer online shopping behaviour using Clustering and Classification algorithms. The main objective of this project is to find the key metrics which contributes the most to predict online purchase behavior. This project also give some suggestions to improve the performance of e-shopping platform. The data is collected from the UCI Machine Learning Repository, https://archive.ics.uci.edu/ml/machine-learning-databases/00468/online_shoppers_intention.csv. The dataset has 12,330, 84.5% (10,422) were negative class samples that did not end with shopping, and the rest (1908) were positive class samples ending with shopping.
+
+## DATA INGESTION
+The dataset is in the .csv format. It consist of 10 numerical and 8 categorical variables.The numerical variables of the dataset were normalized for clustering and classification methods. The 70% of the data were used to train the dataset and our models were evaluated on the remaining 10% of Validation set.
+```{r warning=FALSE, message = FALSE, echo=FALSE}
+#Automatically install missing packages 
+if(!require(plyr)) install.packages("plyr", repos = "http://cran.us.r-project.org")
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(ggplot2)) install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-project.org")
+if(!require(corrplot)) install.packages("corrplot", repos = "http://cran.us.r-project.org")
+if(!require(rpart)) install.packages("rpart", repos = "http://cran.us.r-project.org")
+if(!require(rpart.plot)) install.packages("rpart.plot", repos = "http://cran.us.r-project.org")
+if(!require(randomForest)) install.packages("randomForest", repos = "http://cran.us.r-project.org")
+
+#Libraries we are going to work 
+library(tidyverse)
+library(caret)
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+library(corrplot)
+library(plyr)
+library(dplyr)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(cluster)
+###Load the data
+#Online Shoppers Purchasing Intention Data set 
+#https://archive.ics.uci.edu/ml/machine-learning-databases/00468/online_shoppers_intention.csv
+#Downloading the file and saving it to dl
+dl <- tempfile()
+download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/00468/online_shoppers_intention.csv", dl)
+#Read the csv file 
+data <- read.csv(dl)
+```
+The data frame has 18 variables. The variables Administrative, Administrative_Duration, Informational, Informational_Duration, ProductRelated, ProductRelated_Duration tells about the e-merchant website pages. The website visited by the shopper in specific session and their total time spent in each of these pages. These records were collected from the Uniform Resource Locator information of the pages visited by the consumer. The data also has Google Analytics metrics such as BounceRates, ExitRates, PageValues. Bounce rate refers to the first page a visitor enters, and exit rate refers to the last page they visits before they leaves. Bounce rate is the average number of bounces across all the pages divided by the total number of visits across all of those pages within the same period. This can tell that the searching result of consumer does not  match their intent well. The average bounce rate is 58.18 percentage for B2C businesses. The last page from the shoppers journey of sites is considered an exit page, and it will contribute to determining Exit Rate. The exit rate can be high if the shoppers found the information they needed, and then left the page. Page Value is the average value for a page that a shopper visited before landing on our page or completing an E-commerce transaction (or both). Special Day represents any festival season where we would have more transactions. The dataset also has different information about  the shoppers operating system, browser, region, traffic and visitor type. It also has month of the shoppers visit and a Boolean value indicating whether its a weekend or not. Our target variable is Revenue that says about the customer has purchased on our website or not. Sparkling the curiosity of customer is very essential and making them want to explore instead of leaving website will do wonders in an e-business! And hence these variables are very important to understand. 
+The preview of structure of the data is given below. There are no missing values in the dataset.
+```{r }
+str(data)
+head(data)
+summary(data) #summary statistics
+##Missing value analysis 
+colSums(is.na(data))
+```
+
+## DATA PREPROCESSING
+The structure of the variables were altered according to categorical and numerical basis. Now, the categorical variables were converted into ordered factor variables and numerically encoded. The new dataset look like:
+```{r, echo=FALSE}
+#Preserving the logical class of the variable later we change these into numeric
+data <- data %>% mutate(Weekend_01 = Weekend , Revenue_01 = Revenue)
+#Arranging months by order
+data$Month <- factor(data$Month, levels = c("Feb", "Mar", "May", "June", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), ordered = TRUE)
+#Convert Weekend and Revenue variable from 'FALSE' and 'TRUE' with '1' or '0'
+data$Revenue <- gsub(FALSE, 0, data$Revenue)
+data$Revenue <- gsub(TRUE, 1, data$Revenue)
+data$Weekend <- gsub(TRUE, 1, data$Weekend)
+data$Weekend <- gsub(FALSE, 0, data$Weekend)
+#Converting variables to factors with ordinal variables
+data$OperatingSystems <- factor(data$OperatingSystems)
+data$Browser <- factor(data$Browser)
+data$Region <- factor(data$Region)
+data$TrafficType <- factor(data$TrafficType)
+data$VisitorType <- factor(data$VisitorType)
+data$Revenue<- factor(data$Revenue)
+data$Weekend<- factor(data$Weekend)
+str(data)
+```
+## EXPLORATORY DATA ANALYSIS
+The summary statistics of the dataset is given below
+```{r, echo=FALSE}
+summary(data[,c(1:10)])  #summary statistics
+```
+Lets us explore all variables. The distribution of Revenue tells us that the Revenue turned out is 15 Percent.
+```{r, echo=FALSE}
+#Distribution of Revenue
+table(data$Revenue)
+```
+ The Distribution of Weekend is
+```{r, echo=FALSE}
+#Distribution of Weekend
+table(data$Weekend)
+```
+The Distribution of Visitor Type is
+```{r, echo=FALSE}
+#Distribution of Visitor Type
+table(data$VisitorType)
+```
+The Distribution of Traffic Type is
+```{r, echo=FALSE}
+#Distribution of Traffic Type
+table(data$TrafficType)
+```
+The Distribution of Region is
+```{r, echo=FALSE}
+#Distribution of Region
+table(data$Region)
+```
+The Distribution of Browser is
+```{r, echo=FALSE}
+#Distribution of Browser
+table(data$Browser)
+```
+The Distribution of Operating Systems is
+```{r, echo=FALSE}
+#Distribution of Operating Systems
+table(data$OperatingSystems)
+```
+The Distribution of month is
+```{r, echo=FALSE}
+#Distribution of month
+table(data$Month)
+```
+The summary statistics of Administrative is
+```{r, echo=FALSE}
+#Summary of Administrative
+summary(data$Administrative)
+
+```
+The summary statistics of Administrative_Duration is
+```{r, echo=FALSE}
+#summary of Administrative_Duration
+summary(data$Administrative_Duration)
+```
+The summary statistics of Informational is
+```{r, echo=FALSE}
+#summary of Informational
+summary(data$Informational)
+```
+The summary statistics of Informational_Duration is
+```{r, echo=FALSE}
+#summary of Informational_Duration 
+summary(data$Informational_Duration)
+```
+The summary statistics of Product_Related is
+```{r, echo=FALSE}
+#summary of Product Related
+summary(data$ProductRelated)
+```
+The summary statistics of Product_Related_Duration is
+```{r, echo=FALSE}
+#summary of Product Related_Duration
+summary(data$ProductRelated_Duration)
+```
+Let us perform correlation analysis, which is used to quantify the association between two quantitative variables. 
+
+```{r, echo=FALSE}
+##correlation analysis
+correlation <- cor(data[,c(1:10)])
+corrplot(correlation, diag = TRUE)
+```
+Let us plot the relationship between Bounce Rates and Exit Rates. It is evident from the plot, the shoppers who exit early are some of our potential customers. It is wise show some attractive pop ups like discount or huge offer when a customer attempt to leave the site.
+
+```{r, fig.align='center', echo=FALSE}
+##Relationship between Bounce Rates and Exit Rates
+data %>% ggplot(aes(x = BounceRates, y = ExitRates)) +
+  geom_point(aes(color = Revenue)) + 
+  geom_smooth(se = TRUE, alpha = 0.5) + 
+  ggtitle("Relationship between Exit Rates and Bounce Rates") + 
+  xlab("Bounce Rates") + ylab("Exit Rates") + 
+  geom_text(aes(x = 0.15, y = 0.05, label = "Correlation is 0.913"))
+```
+When we explore the relationship between visitor type-Exit Rate and visitor type-page values with respective to Revenue, the new visitor contributes more revenue than the returning visitor. Offering the reference coupons and giving discounts on it can bring new customers.
+```{r, fig.show="hold", out.width="50%", echo=FALSE}
+##Revenue based on visitor type and Exit Rates 
+data %>% ggplot(aes(VisitorType,ExitRates,color= Revenue)) + 
+  geom_point()+ 
+  ggtitle("Revenue based on Visitor type  and Exit Rates") + 
+  xlab("Visitor Type") + 
+  ylab("Exit Rates") +
+  theme(legend.position = "bottom") 
+
+##Revenue based on visitor type and page values
+data %>% ggplot(aes(x = VisitorType, y = PageValues,color= Revenue)) + 
+  geom_point()+ 
+  ggtitle("Revenue based on Visitor type and Page values") + 
+  xlab("Visitor type") + 
+  ylab("Page values") +
+  theme(legend.position = "bottom")
+
+
+```
+The conversion rate of potential customers is very important. Concentrating on new customers will significantly improve the sales and revenue growth. From the below plot, the purchase made during the weekday is higher than the weekends. Introducing weekends based promotional events may help the shoppers to engage during weekends.
+```{r, fig.show="hold", out.width="50%", echo=FALSE}
+##Revenue based on visitor type and weekends
+data %>% ggplot(aes(x = Revenue)) + 
+  geom_bar(aes(fill = VisitorType)) + 
+  ggtitle("Revenue based on visitor type") + 
+  xlab("Revenue status") + 
+  ylab("Visitors") +
+  theme(legend.position = "bottom") 
+
+data %>% ggplot(aes(x = Revenue)) + 
+  geom_bar(aes(fill = Weekend)) + 
+  ggtitle("Revenue based on weekend status") + 
+  xlab("Revenue status") + ylab("Visitors") +
+  theme(legend.position = "bottom")
+
+```
+The below plot explain the seasonality revenue improvement. There seems to be many customers buy products during March to May and October to November. The plot also suggests that lot of customer are viewing the item but final transactions are made after adding into the cart. There may be hidden charges which may lead to loose the customers. Attractive offers and promotional events during festive season may engage more customers.
+```{r, fig.show="hold", out.width="50%", echo=FALSE}
+##Seasonality Revenue Growth
+#Estimate Trend for revenue based on months
+Revenue_Month <- data.frame(table(data$Month, data$Revenue))
+names(Revenue_Month) <- c("Months", "Revenue", "Frequency")
+Revenue_Month %>% ggplot(aes(x = Months, y = Frequency)) + 
+  geom_line(aes(color = Revenue, group = Revenue), lwd = 1) +
+  geom_point(aes(color = Revenue, group = Revenue, size = 0.2), show.legend = FALSE) + 
+  theme_light() + scale_y_continuous() + 
+  ggtitle("Trend line for revenue based on months") + 
+  xlab("Months") + ylab("Visitors") 
+#Estimate the Trend for visitor Type based on months
+Visitor_Month <- data.frame(table(data$VisitorType, data$Month))
+names(Visitor_Month) <- c("VisitorType", "Month", "Frequency")
+Visitor_Month %>% ggplot(aes(x = Month, y = Frequency)) + 
+  geom_line(aes(color = VisitorType, group = VisitorType), lwd = 1) + 
+  geom_point(aes(color = VisitorType, group = VisitorType, size = 0.1), show.legend = FALSE) +
+  theme_light() + scale_y_continuous() + ggtitle("Trend line for visitor type based on months") + xlab("Months") + ylab("Visitors")
+```
+The operating systems of the user may also be considered as significant characteristics of predicting the shoppers. Most of our customer uses '2' OS type. Other OS are used by less customers. This could also mean many customer are not preferring to use the site in other sources. 
+```{r, fig.show="hold", out.width="50%", echo=FALSE}
+##Relationship between Operating Systems and Revenue 
+os_Revenue <- data.frame(table(data$OperatingSystems, data$Revenue))
+str(os_Revenue)
+names(os_Revenue) <- c("OS", "Revenue", "Frequency")
+Revenue_0 <- os_Revenue %>% filter(Revenue == 0)
+Revenue_0$p <- (Revenue_0$Frequency / sum(Revenue_0$Frequency)) * 100
+Revenue_1 <- os_Revenue %>% filter(Revenue == 1)
+Revenue_1$p <- (Revenue_1$Frequency / sum(Revenue_1$Frequency)) * 100
+
+#Plotting the Relationship between Operating Systems and Revenue 
+Revenue_0 %>% ggplot(aes(x = reorder(OS, -p), y = p)) + 
+  geom_bar(stat = "identity", mapping = aes(fill = OS)) +
+  scale_y_continuous() +
+  xlab("Operating System Types") + 
+  ylab("Total visitors in percentage") + 
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between OS and Revenue") + 
+  labs(subtitle = "Revenue = 0")
+Revenue_1 %>% ggplot(aes(x = reorder(OS, -p), y = p)) + 
+  geom_bar(stat = "identity", mapping = aes(fill = OS)) + 
+  scale_y_continuous() + 
+  xlab("Operating System Types") + 
+  ylab("Total visitors in percentage") + 
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between OS and Revenue") + 
+  labs(subtitle = "Revenue = 1")
+
+```
+The relationship between Browser and Revenue states that the type '2' remains at the top. This may also suggest the website is not user friendly with other type of browsers. Web designers can concentrate on this for better improvement.
+```{r, fig.show="hold", out.width="50%", echo=FALSE}
+##Relationship between Browser and Revenue
+Browser_Revenue <- data.frame(table(data$Browser, data$Revenue))
+str(Browser_Revenue)
+names(Browser_Revenue) <- c("Browser", "Revenue", "Frequency")
+Revenue_0B <- Browser_Revenue %>% filter(Revenue == 0)
+Revenue_0B$p <- (Revenue_0B$Frequency / sum(Revenue_0B$Frequency)) * 100
+Revenue_1B  <- Browser_Revenue %>% filter(Revenue == 1)
+Revenue_1B$p <- (Revenue_1B$Frequency / sum(Revenue_1B$Frequency)) * 100
+
+##Plotting the Relationship between Browser and Revenue 
+Revenue_0B %>% ggplot(aes(x = reorder(Browser, -p), y = p)) + 
+  geom_bar(stat = "identity", mapping = aes(fill = Browser)) +
+  scale_y_continuous() +
+  xlab("Browser Types") + 
+  ylab("Total visitors in percentage") + 
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between Browser and Revenue") + 
+  labs(subtitle = "Revenue = 0")
+Revenue_1B %>% ggplot(aes(x = reorder(Browser, -p), y = p)) + 
+  geom_bar(stat = "identity", mapping = aes(fill = Browser)) +
+  scale_y_continuous() +
+  xlab("Browser Types") + 
+  ylab("Total visitors in percentage") + 
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between Browser and Revenue") + 
+  labs(subtitle = "Revenue = 1")
+
+```
+The relationship between Region and Revenue states that the most of our customers are from '1' and '3'. The marketing reach strategy can be helpful in these regions.
+```{r, fig.show="hold", out.width="50%", echo=FALSE}
+##Relationship between Region and Revenue
+Region_Revenue<- data.frame(table(data$Region, data$Revenue))
+str(Region_Revenue)
+names(Region_Revenue) <- c("Region", "Revenue", "Frequency")
+Revenue_0R <- Region_Revenue %>% filter(Revenue == 0)
+Revenue_0R$p <- (Revenue_0R$Frequency / sum(Revenue_0R$Frequency)) * 100
+Revenue_1R  <- Region_Revenue %>% filter(Revenue == 1)
+Revenue_1R$p <- (Revenue_1R$Frequency / sum(Revenue_1R$Frequency)) * 100
+
+#Plotting the Relationship between Region and Revenue 
+Revenue_0R %>% ggplot(aes(x = reorder(Region, -p), y = p)) + 
+  geom_bar(stat = "identity", mapping = aes(fill = Region)) +
+  scale_y_continuous() + 
+  xlab("Region") + ylab("Total visitors (in percentage)") + 
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between Region and Revenue") + 
+  labs(subtitle = "Revenue = 0")
+Revenue_1R %>% ggplot(aes(x = reorder(Region, -p), y = p)) + 
+  geom_bar(stat = "identity", mapping = aes(fill = Region)) +
+  scale_y_continuous() + 
+  xlab("Region") + ylab("Total visitors (in percentage)") + 
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between Region and Revenue") + 
+  labs(subtitle = "Revenue = 1")
+
+```
+The relationship plot between Traffic and Revenue states the type '2' traffic leads 'type1' and '3'.The Google SEO optimization can bring some improvement. Digital marketing in social media via ads can also bring significant customers.
+```{r, fig.show="hold", out.width="50%", echo=FALSE}
+##Relationship between Traffic and Revenue
+Traffic_Revenue<- data.frame(table(data$TrafficType, data$Revenue))
+str(Traffic_Revenue)
+names(Traffic_Revenue) <- c("TrafficType", "Revenue", "Frequency")
+Revenue_0T  <- Traffic_Revenue %>% filter(Revenue == 0)
+Revenue_0T$p <- (Revenue_0T$Frequency / sum(Revenue_0T$Frequency)) * 100
+Revenue_1T <- Traffic_Revenue%>% filter(Revenue == 1)
+Revenue_1T$p <- (Revenue_1T$Frequency / sum(Revenue_1T$Frequency)) * 100
+
+#Plotting the Relationship between Traffic and Revenue 
+Revenue_0T %>% ggplot(aes(x = reorder(TrafficType, -p), y = p)) + 
+  geom_bar(stat = "identity", mapping = aes(fill = TrafficType)) + 
+  scale_y_continuous() + 
+  xlab("Traffic") + ylab("Total visitors (in percentage)") + 
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between Traffic and Revenue") + labs(subtitle = "Revenue = 0")
+Revenue_1T %>% ggplot(aes(x = reorder(TrafficType, -p), y = p)) + 
+  geom_bar(stat = "identity", mapping = aes(fill = TrafficType)) + 
+  scale_y_continuous() + 
+  xlab("Traffic") + ylab("Total visitors (in percentage)") + 
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between Traffic and Revenue") + labs(subtitle = "Revenue = 1")
+
+```
+
+## MODEL PREPARATION
+In this project we used clustering and classification algorithms. And hence it is very essential to prepare our data for our models. Here we change all variable levels into factors with numeric levels. The distance between data points are important. Scaling the numeric data is very essential for certain machine learning models as we can maintain the same distribution of attributes. Then, removing the unwanted columns for evaluation.
+```{r, echo=FALSE}
+#Convert variables into factors with ordinal variables
+#Convert ordinal variables into numeric for models
+data$Month <- factor(data$Month, order = TRUE, levels =c('Feb', 'Mar', 'May', 'June','Jul', 'Aug', 'Sep','Oct', 'Nov','Dec'))
+data$Month_numeric <- mapvalues(data$Month, from = c('Feb', 'Mar', 'May', 'June','Jul', 'Aug', 'Sep','Oct', 'Nov','Dec'), to = c(1,2,3,4,5,6,7,8,9,10))
+data$VisitorType <- factor(data$VisitorType, order = TRUE, levels = c('Returning_Visitor', 'Other', 'New_Visitor'))
+data$VisitorType_Numeric <-mapvalues(data$VisitorType, from = c("Returning_Visitor", "Other", "New_Visitor"), to = c(1,2,3))
+data$OperatingSystems <- factor(data$OperatingSystems, order = TRUE, levels = c(6,3,7,1,5,2,4,8))
+data$Browser <- factor(data$Browser, order = TRUE, levels = c(9,3,6,7,1,2,8,11,4,5,10,13,12))
+data$Region <- factor(data$Region, order = TRUE, levels = c(8,6,3,4,7,1,5,2,9))
+data$TrafficType <- factor(data$TrafficType, order = TRUE, levels = c(12,15,17,18,13,19,3,9,1,6,4,14,11,10,5,2,20,8,7,16))
+data$Weekend <- as.numeric(factor(data$Weekend))
+# Scaling the data
+scaling <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+#Copy the data 
+scaling_data<- data
+str(scaling_data)
+#Scaling all the numeric variables in data
+scaling_data$Administrative <- scaling(data$Administrative)
+scaling_data$Administrative_Duration <- scaling(data$Administrative_Duration)
+scaling_data$Informational<- scaling(data$Informational)
+scaling_data$Informational_Duration<- scaling(data$Informational_Duration)
+scaling_data$ProductRelated <- scaling(data$ProductRelated)
+scaling_data$ProductRelated_Duration <- scaling(data$ProductRelated_Duration)
+scaling_data$BounceRates <- scaling(data$BounceRates)
+scaling_data$ExitRates <- scaling(data$ExitRates)
+scaling_data$PageValues <- scaling(data$PageValues)
+scaling_data$SpecialDay <- scaling(data$SpecialDay)
+
+#To remove the unwanted columns for clustering models
+scaling_data_cluster <- scaling_data [-c(11,16,18,19,20)]
+```
+The train-test split procedure is used to estimate the performance of machine learning algorithms when they are used to make predictions on data not used to train the model.Training set is a subset to train a model; Test set is a subset to test the trained model. Here we are splitting the data into 70 : 30 ratio for training and validation set. 
+```{r}
+#Splitting the data
+#Splitting the data into 70:30 ratio
+model_data <- data[-c(17,18,21,22)] # model_data for classification models
+set.seed(777, sample.kind="Rounding")# if using R 3.5 or earlier, use `set.seed(1)`
+#Data Partition
+test_index <- createDataPartition(model_data$Revenue, p = 0.7, list=FALSE)
+#Training set
+train_data <- model_data[test_index,]
+#Test set
+test_data <- model_data[-test_index,]
+```
+## MODEL CREATION
+The exploratory data analysis clearly says there is no clear distribution patterns among all attributes. Clustering can provide surprising insights into your data. Hence, we can use a clustering algorithm to classify each data point into a specific group. Hierarchical clustering are good fit for categorical data. Hierarchical clustering excels at discovering embedded structures in the data but does not provide information about other points are considered. K-means are good fit for numeric data. K-means considers every point in the dataset and uses that information to evolve the clustering over a series of iterations. K-means works by selecting k central points, or means.Any point that is closest to a given mean is assigned to that mean’s cluster. Once if all points are assigned, move through each cluster and take the average of all points. This new average point is the new mean of the cluster.This process is repeated until the point assignments stop changing, the algorithm is said to have converged. K-means is a very powerful method for finding a known number of clusters while considering the entire dataset.
+The structure of the data for clustering algorithm is
+```{r, echo=FALSE}
+## Clustering models
+str(scaling_data_cluster)
+summary(scaling_data_cluster)
+
+```
+k-means consists of defining k clusters such that total within-cluster variation is minimum. To decide the number of optimal number of clusters we choose the Elbow Method. Calculate the Within-Cluster-Sum of Squared Errors (WSS) for different values of k, and choose the k for which WSS becomes first starts to diminish. In the plot of WSS-versus-k, this is visible as an elbow.
+```{r, echo=FALSE}
+##Elbow Method for finding the optimal number of clusters
+set.seed(123)
+# Compute and plot wss for k = 2 to k = 15.
+k.max <- 15
+data <- scaling_data_cluster
+wss <- sapply(1:k.max, function(k){kmeans(data, k, nstart=50,iter.max = 15 )$tot.withinss})
+wss
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+#The plot above represents the variance within the clusters. 
+#This bend indicates that additional clusters beyond the fourth have little value. 
+```
+The above plot above represents the variance within the clusters. The bend indicates that additional clusters beyond the fourth have little value. The R function kmeans() is used to compute k-means algorithm.
+```{r, echo=FALSE}
+# k-means clustering algorithm
+#the maximum number of iterations allowed =100,number of clusters =2
+# you can also check for centers = 4 too
+k_means <- kmeans(scaling_data_cluster, centers = 2)
+#The cluster assignments are in the cluster component
+groups <- k_means$cluster
+```
+```{r}
+str(k_means)
+#size of cluster
+k_means$size  
+#Means
+k_means$centers  
+#sum of squares
+k_means$betweenss / k_means$totss 
+```
+A Cluster	is a vector of integers  1:k indicating the cluster to which each point is allocated. Centers	is a matrix of cluster centres. totss	is the total sum of squares. withinss is a vector of within-cluster sum of squares, one component per cluster. tot.withinss	is a total within cluster sum of squares. betweenss is between cluster sum of squares. The size represents the number of points in each cluster.
+K-means is a least-squares optimization problem. Principal Component Analysis(PCA) finds the least-squares cluster membership vector. Here, we use PCA to verify the clusters formed. PCA is used for dimensionality reduction, when the feature space contains too many irrelevant or redundant features. The aim is to find the intrinsic dimensionality of the data.
+```{r, echo=FALSE}
+# To verify if the clusters were extracted correctly, pca performed
+pca <- prcomp(scaling_data_cluster[c(1:10)], scale. = TRUE)
+summary(pca)  #summary statistics of pca
+pca_data <- as.data.frame(pca$x)
+
+#Plotting 10 Principal Components 
+plot(pca_data , main = "Principal Components")
+```
+```{r, fig.show="hold", out.width="50%", echo=FALSE}
+#Comparison of the clusters
+data.frame(pc_1 = pca$x[,1], pc_2 = pca$x[,2], 
+           Revenue = scaling_data$Revenue) %>%
+  ggplot(aes(pc_1, pc_2, color = Revenue)) +
+  geom_point() +ggtitle("PC1 vs PC2, Revenue ")
+pca_data %>% ggplot(aes(PC1,PC2, color = k_means$cluster))+  geom_point() +ggtitle("PC1 vs PC2, K-Means Clusters")
+```
+```{r, echo=FALSE}
+#plot pca importance
+plot(summary(pca)$importance[3,])
+summary(pca)$importance[3,]
+```
+A cross-tabulation of Revenue type  and cluster membership is given by
+```{r}
+#confusion matrix
+confusion_matrix <- table(k_means$cluster, scaling_data$Revenue)
+confusion_matrix
+```
+The confusion matrix is one of the most intuitive metric used for finding the correctness and accuracy of the model.The ideal scenario would be that the model should give 0 False Positives and 0 False Negatives. But that’s not the case in real life as any model will not be 100% accurate most of the times. We know that there will be some error associated with every model that we use for predicting the true class of the target variable. 
+The predictive power of the model is determined by three measures precision, recall and F1 score.  Precision is a good measure to determine, when the costs of False Positive is high. Recall calculates how many of the actual Positives our model capture through labeling it as  true Positive. F1 score is the best measure which balances between precision and recall and when there is a uneven class distribution.
+```{r}
+#predictive power of the model
+precision_kmeans<- confusion_matrix [1,1]/(sum(confusion_matrix [1,]))
+precision_kmeans 
+recall_kmeans<- confusion_matrix [1,1]/(sum(confusion_matrix [,1]))
+recall_kmeans  
+#F1 score
+F1<- 2*precision_kmeans*recall_kmeans/(precision_kmeans+recall_kmeans)
+F1   
+```
+The model depicts high error rates and low F1 score. We can try with centers = 4.
+```{r, echo=FALSE}
+## K_means for centers = 4
+k_means_4 <- kmeans(scaling_data_cluster, centers = 4)
+#The cluster assignments are in the cluster component
+groups_4 <- k_means_4$cluster
+```
+```{r}
+str(k_means_4)
+#size of cluster
+k_means_4$size  
+#Means
+k_means_4$centers   
+#sum of squares
+k_means_4$betweenss / k_means_4$totss  
+#confusion matrix
+confusion_matrix_4 <- table(k_means_4$cluster, scaling_data$Revenue)
+confusion_matrix_4  
+#predictive power of the model
+presicion_kmeans_4<- confusion_matrix_4 [1,1]/(sum(confusion_matrix_4[ 1,]))
+presicion_kmeans_4 
+recall_kmeans_4<- confusion_matrix_4[1,1]/(sum(confusion_matrix_4[,1]))
+recall_kmeans_4  
+#F1 score
+F1_4<- 2*presicion_kmeans_4*recall_kmeans_4/(presicion_kmeans_4+recall_kmeans_4)
+F1_4  
+```
+F1 score reveals very little change. Clustering techniques did not observe any significant performance improvement. Due to class imbalance problem we were not able to perform in clustering models. Hence we may need more data to perform better.
+Next, we  will try decision tree model. Decision tree is a widely used classifier. The first use of a tree-based decision system was used in artificial intelligence in 1960. Decision tree analyzes and extracts valuable rules as well as relationships from large data source. Since the decisions are made at multiple levels, these supervised classifiers are more efficient than single stage classifiers. It uses tree structure to make decisions. Tree structure consists of root node, child nodes and leaf nodes; each node makes decision based on its attribute value of data. One of the most commonly used decision tree is binary tree uses tree growing approach for classification. In binary trees, a case traversing to the left child is true while a case traversing to the right is false. When more features are introduced, the problem of classification becomes much more complex. The difficulty in utilizing decision trees lies in their construction. Here is the data we are going to use:
+```{r, warning = FALSE, echo=FALSE}
+
+##Decision Tree model
+str(model_data)
+set.seed(1,sample.kind="Rounding")
+# Fit classification tree model
+fit_dt <- rpart(Revenue_01 ~ . , data = train_data, method="class")
+# Predict the test data
+predict_dt<- predict(fit_dt,test_data[-18],type = "class") #remove revenue column in test for prediciton
+```
+```{r }
+#Accuracy 
+mean(predict_dt==test_data$Revenue_01) #Accuracy
+```
+```{r, echo=FALSE}
+#Decision tree
+rpart.plot(fit_dt,box.palette = "RdYlGn", shadow.col = "darkgray")
+#Variable importance of decision Tree
+data.frame(fit_dt$variable.importance)
+```
+
+From the above decision tree, it is evident that the most significant attribute contributing towards the most information output. The variable importance table describes all the revenue drivers. The F1 Score is considerable increase as compared to previous models. PageValue suggests that customers look at different variety of products. So optimization of website pages is very important. Personalized tracking of customers, reducing the exit rate, engaging the new visitors, Weekend promotional activities, Festive season discounts and offers, User friendly website, working on marketing strategy, promoting via social media, a good recommendation system for suggesting variety of products can improve the revenue drastically. 
+
+## RESULT
+The evaluation metrics are precision, recall, F1 score. The decision tree gave a very precise model (0.92) that also has good recall (0.96) and high F1 score value of 0.94. The
+final prediction accuracy is 0.89. Thus the decision tree model is a powerful predictive tool when compared to clustering technique because of the limited data. 
+```{r }
+#Predictive power of the decision tree model
+confusion_matrix_dt<- table(predict_dt,test_data$Revenue_01) 
+confusion_matrix_dt
+#Precision
+presicion_dt<- confusion_matrix_dt[1,1]/(sum(confusion_matrix_dt[1,]))
+presicion_dt  #Precision
+#Recall
+recall_dt<- confusion_matrix_dt[1,1]/(sum(confusion_matrix_dt[,1]))
+recall_dt #Recall
+#F1 score
+F1_dt<- 2*presicion_dt*recall_dt/(presicion_dt+recall_dt)
+F1_dt  #F1 score
+```
+
+## CONCLUSION
+In this project we predict, based on an extensive set of predictors from different categories, whether a potential customer will engage in online-purchasing behaviour. Though our dataset is limited in size, we are able to highlight the list of suggestions via decision tree model which may improve e-retailers target. We can also examine whether the results only hold for small e-commerce companies or can be generalized to all shops should be tested in additional studies. The prediction accuracy, especially in the recognition of a few categories, needs to be improved. In the future, in-depth research can be made on the prediction of purchases of multiple categories of products, making real-time predictions and personalization of users browsing preferences.
+
+## REFERENCES
+1) CITATION REQUEST FOR DATA:
+Sakar, C.O., Polat, S.O., Katircioglu, M. et al. Neural Comput & Applic (2018)
+
+2) Introduction to Data Science - Data Analysis and Prediction Algorithms with R by Prof. Rafael A. Irizarry (2019-03-27)
+
+3) Xiaotong Dou, Online Purchase Behavior Prediction and Analysis Using Ensemble Learning , Institute of Electrical and Electronics Engineers(IEEE), 5th International Conference on Cloud Computing and Big Data Analytics,2020
+
+4) Dirk Van den Poel,Wouter Buckinx, Predicting online-purchasing behaviour, European Journal of Operational Research(ELSEVIER), Interfaces with Other Disciplines, 2004
